@@ -1,0 +1,14 @@
+{
+  "name": "farmers-market",
+  "version": "1.0.0",
+  "description": "farmers market app",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Curtis Rubeck and Max Lemke",
+  "license": "ISC",
+  "dependencies": {
+    "react": "^18.2.0"
+  }
+}
