@@ -1,0 +1,51 @@
+# Node modules and coverage directories
+node_modules/
+coverage/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Docker: ignore all logs, data volumes, and build artifacts
+**/node_modules/
+**/npm-debug.log
+**/yarn-error.log
+docker-compose*.yml
+*Dockerfile*
+**/.docker/
+**/docker/tmp/*
+**/docker/volumes/*
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+
+# Operating System generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE and editor folders
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build outputs
+/dist
+/tmp
+/out
+/build
+/*.tar.gz
+/*.zip
+
+# Dependency directories
+jspm_packages/
+bower_components/
