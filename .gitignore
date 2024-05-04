@@ -16,6 +16,7 @@ docker-compose*.yml
 **/.docker/
 **/docker/tmp/*
 **/docker/volumes/*
+**/docker/db/*
 
 # Logs and databases
 *.log
