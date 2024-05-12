@@ -4,22 +4,73 @@ import os
 import argparse
 from dataclasses import dataclass, field
 from typing import List, Optional
+import secrets
+import string
+from dotenv import dotenv_values
+from dataclasses import dataclass
+
+@dataclass
+class DBConfig:
+    dbname: str
+    user: str
+    password: str
+    host: str
+    port: int
+
+alphabet = string.ascii_letters + string.digits + string.punctuation
+
+def alter_role_password(cursor, role, password):
+    try:
+        cursor.execute(sql.SQL("ALTER ROLE {role} WITH PASSWORD {password}").format(role=sql.Identifier(role), password=sql.Literal(password)))
+        print(f"Password set to {password} for {role} successfully.")
+    except psycopg2.Error as e:
+        print(f"Error setting password: {e}")
 def check_existence(cur, sql):
     cur.execute(sql)
     return cur.fetchone() is not None
-def connect_to_db(user,password,host_conn,port_var,dbname):
+def modify_env_variable(file_path, key_to_update, new_value):
+    # Initialize a dictionary to hold the environment variables
+    env_variables = {}
+    try:
+        with open(file_path, 'r') as file:
+            for line in file:
+                key, value = line.strip().split('=', 1)
+                env_variables[key] = value
+
+    # Read the existing .env file
+    except FileNotFoundError:
+        print(f"File {file_path} not found.")
+        try:
+            f = open(file_path, "x")
+            print(f"File {file_path} created.")
+            f.close()
+        except Exception as e:
+            print(f"Error creating file {file_path}: {e}")
+        return
+
+    # Update the specific environment variable
+    env_variables[key_to_update] = new_value
+
+    # Write the updated content back to the .env file
+    with open(file_path, 'w') as file:
+        for key, value in env_variables.items():
+            file.write(f'{key}={value}\n')
+
+    print(f"Updated {key_to_update} in .env file successfully.")
+
+def connect_to_db(db: DBConfig):
     try:
         conn = psycopg2.connect(
-        host=host_conn,
-        port=port_var,
-        user=user,
-        password=password,
-        dbname=dbname
+        host=db.host,
+        port=db.port,
+        user=db.user,
+        password=db.password,
+        dbname=db.dbname
         )
-        print(f"Connected to the database {dbname} on host {host_conn} port {port_var} with user {user}.")
+        print(f"Connected to the database {db.dbname} on host {db.host} port {db.port} with user {db.user}.")
         return conn
     except psycopg2.Error as e:
-        print(f"Error: Could not make connection to the Postgres database\n{e}")
+        print(f"Error: Could not make connection to the Postgres database {db.dbname}\n{e}")
         exception = e
 def create_database(cursor,dbname):
     database_exists_sql = sql.SQL("SELECT 1 FROM pg_database WHERE datname = {database}").format(database=sql.Literal(dbname))
@@ -80,36 +131,49 @@ def apply_grants(cursor, role, level, dbname=None, tablename=None):
         print(f"Grants applied successfully for role {role} at level {level}.")
     except Exception as e:
         print(f"Failed to apply grants: {e}")
-
-def setup_db(dbname,user_var,passwd,host_conn,port_var,db_user,db_user_pass,host_dbname):
-    conn=connect_to_db(user_var,passwd,host_conn,port_var,host_dbname)
-    conn.set_session(autocommit=True)
-    db_service_role=dbname+"_admin_role"
-    db_service_role=dbname+"_admin_role"
+# def update_password_and_env(cursor, role, env_file):
+#     new_password = ''.join(secrets.choice(alphabet) for i in range(20))
+#     modify_env_variable(".env", "PGPASSWORD", new_password)
+#     config = dotenv_values(".env")
+#     new_password = config.get("PGPASSWORD")
+#     print(f"New password: {new_password}")
+#     with conn.cursor() as cursor:
+#         alter_role_password(cursor, config.get("PGUSER"), config.get("PGPASSWORD"))
+def setup_db(conn,config):
     with conn.cursor() as cursor:
-        create_database(cursor,dbname)
-        create_role(cursor,db_service_role)
-        apply_grants(cursor, db_service_role, 'db_admin', dbname)
-        create_role(cursor,db_user,login='LOGIN',password=db_user_pass)
+        create_database(cursor,config.get("APPDATABASE"))
+        create_role(cursor,cursor,config.get("APPDATABASE"))
+        apply_grants(cursor,config.get("APPSERVICEROLE"), 'db_admin', cursor,config.get("APPDATABASE"))
+        create_role(cursor,config.get("APPSERVICERUSER"),login='LOGIN',password=db_user_pass)
         add_role_to_role(cursor,db_user,db_service_role)
     
     conn.close()
     
-def getCredentials():
-    host_conn=os.getenv("PGHOST")
-    port_var=os.getenv("PGPORT")
-    user_var=os.getenv("PGUSER")
-    passwd=os.getenv("PGPASSWORD")
-    farmers_market_user=os.getenv("FARMERSMARKETUSER")
-    farmers_market_user_pass=os.getenv("FARMERSMARKETPASS")
-    return host_conn,port_var,user_var,passwd,farmers_market_user,farmers_market_user_pass
 
 def main(delete_db):
     # Create the database
-    host_conn,port_var,user_var,passwd,farmers_market_user,farmers_market_user_pass=getCredentials()
-    db_service_role="db_service_role_farmers_market_admin"
-    database="farmers_market"
-    setup_db(database,user_var,passwd,host_conn,port_var,farmers_market_user,farmers_market_user_pass,'postgres')   
+    # modify_env_variable(".env", "PGDATABASE", "postgres")
+    # host_conn,port_var,user_var,passwd,farmers_market_user,farmers_market_user_pass=getCredentials()
+    config = dotenv_values(".env")
+    # print(config.get("PGDATABASE"))
+    # db_service_role="db_service_role_farmers_market_admin"
+    # database="farmers_market"
+    database_details=DBConfig(config.get("PGDATABASE"),config.get("PGUSER"),config.get("PGPASSWORD"),config.get("PGHOST"),config.get("PGPORT"))
+    conn=connect_to_db(database_details)
+    conn.set_session(autocommit=True)
+    if database_details.password=="postgres":
+        new_password = ''.join(secrets.choice(alphabet) for i in range(20))
+        modify_env_variable(".env", "PGPASSWORD", new_password)
+        config = dotenv_values(".env")
+        new_password = config.get("PGPASSWORD")
+        print(f"New password: {new_password}")
+        with conn.cursor() as cursor:
+            alter_role_password(cursor, config.get("PGUSER"), config.get("PGPASSWORD"))
+        conn.close()
+        database_details.password = new_password
+        conn=connect_to_db(database_details)
+    # setup_db(database,user_var,passwd,host_conn,port_var,farmers_market_user,farmers_market_user_pass,'postgres') 
+    conn.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Manage the farmers_market database.")
